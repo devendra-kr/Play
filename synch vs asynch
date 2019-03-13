@@ -1,0 +1,37 @@
+The The difference is that with your "sync" case, the entire thread/actor/whatever-it-is that handles your request in Play has been tied up, twiddling its thumbs while it waits for Thread.sleep to finish.
+
+In the "async" case by contrast, the handling function has actually run and thus the resource that ran it (the thread/actor/whatever) is freed up to do other things. When the Future eventually completes, it can finish off the job.
+
+The best way to see the difference is to sprinkle in a couple of log entries:
+
+def intensiveComputation(): Int = {
+  Logger.info("Sleeping")
+  Thread.sleep(5000)
+  Logger.info("Woke up")
+  return 1
+}
+
+def testPromiseSync() = Action {
+  val result = Ok("sync" + intensiveComputation())
+  Logger.info("returning to Play")
+  result
+}
+
+def testPromiseAsync = Action.async {
+  val futureint = scala.concurrent.Future { intensiveComputation() }
+  val f = futureint.map(i => Ok("async" + i))
+  Logger.info("returning to Play")
+  f
+}
+When we hit the sync endpoint, we see:
+
+2014-05-14 17:23:39,359 [info] application - Sleeping
+2014-05-14 17:23:44,359 [info] application - Woke up
+2014-05-14 17:23:44,359 [info] application - returning to Play
+And the async:
+
+2014-05-14 17:24:23,376 [info] application - Sleeping
+2014-05-14 17:24:23,376 [info] application - returning to Play
+2014-05-14 17:24:28,376 [info] application - Woke up
+
+So by employing Action.async you freed up Play to handle more requests "at once", while keeping the end-user experience unchanged.
